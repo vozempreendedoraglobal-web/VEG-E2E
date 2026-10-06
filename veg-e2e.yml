@@ -1,0 +1,76 @@
+# ============================================================================
+# VEG — Testes E2E (Playwright) em GitHub Actions
+# Ficheiro a colocar em: .github/workflows/veg-e2e.yml
+#
+# Disparo automático:
+#   • push/PR que toque em index.html ou nos testes
+#   • todos os dias às 06:00 UTC (monitorização)
+#   • manualmente: separador "Actions" → "VEG E2E Tests" → "Run workflow"
+#
+# Secrets necessários (Settings → Secrets and variables → Actions):
+#   VEG_APP_URL   — URL do site VEG (ex.: https://vegglobal.com/index.html)
+#   VEG_API_URL   — URL do web app Apps Script /exec
+#   VEG_NOTIF_BTN — (opcional) id real do botão do sino de notificações
+# ============================================================================
+name: VEG E2E Tests
+
+on:
+  push:
+    branches: [main]
+    paths: ['index.html', 'veg_e2e_CORRIGIDO.spec.js', 'playwright.config.js', '.github/workflows/veg-e2e.yml']
+  pull_request:
+    paths: ['index.html', 'veg_e2e_CORRIGIDO.spec.js', 'playwright.config.js', '.github/workflows/veg-e2e.yml']
+  schedule:
+    - cron: '0 6 * * *'        # 06:00 UTC diário (= 07:00 em Luanda, horário de Verão)
+  workflow_dispatch:            # execução manual a partir do telemóvel
+
+concurrency:
+  group: veg-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Playwright T1–T10
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 📥 Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: 🔧 Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: 📦 Instalar dependências
+        run: npm ci || npm install
+
+      - name: 🎭 Instalar Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: 🧪 Executar testes E2E (T1–T10)
+        env:
+          VEG_APP_URL: ${{ secrets.VEG_APP_URL }}
+          VEG_API_URL: ${{ secrets.VEG_API_URL }}
+          VEG_NOTIF_BTN: ${{ secrets.VEG_NOTIF_BTN }}
+          CI: true
+        run: npx playwright test --reporter=github,html,json
+
+      - name: 📤 Guardar relatório HTML (sempre)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: veg-e2e-report
+          path: playwright-report/
+          retention-days: 30
+
+      - name: 📤 Guardar evidências de falha (screenshots/vídeos/traces)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: veg-e2e-failures
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 30
